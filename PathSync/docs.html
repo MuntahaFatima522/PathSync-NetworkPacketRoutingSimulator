@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PathSync — Technical Documentation & Pathfinder Theory</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="theme.css">
+  <script>(function(){var t=localStorage.getItem('netroute-theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script src="theme.js" defer></script>
+  <style>
+    .docs-grid {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 30px;
+      margin: 40px auto;
+    }
+    
+    .docs-sidebar {
+      position: sticky;
+      top: 20px;
+      height: fit-content;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .docs-sidebar a {
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.15s;
+      padding: 6px 12px;
+      border-left: 2px solid var(--border);
+    }
+    
+    .docs-sidebar a:hover,
+    .docs-sidebar a.active {
+      color: var(--dijk);
+      border-left-color: var(--dijk);
+    }
+    
+    .docs-content {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      line-height: 1.7;
+    }
+    
+    .docs-section h2 {
+      font-family: var(--sans);
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    
+    .code-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-x: auto;
+      margin: 12px 0;
+      color: var(--text-muted);
+    }
+    .code-block .keyword { color: var(--bell); font-weight: 600; }
+    .code-block .comment { color: var(--text-dim); }
+    .code-block .highlight { color: var(--dijk); font-weight: 600; }
+    
+    .relax-deck {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 16px;
+      align-items: center;
+    }
+    
+    .relax-visual {
+      height: 160px;
+      background: var(--surface3);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      padding: 10px;
+    }
+    .relax-visual svg { width:100%; height:100%; }
+    .relax-visual .node-circle { fill: var(--surface2); stroke: var(--neutral); stroke-width: 1.5; }
+    .relax-visual .node-circle.active { stroke: var(--dijk); fill: color-mix(in srgb, var(--dijk) 10%, var(--surface2)); }
+    .relax-visual .edge-line.active { stroke: var(--dijk); stroke-width: 2.5; }
+    
+    .relax-details {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .relax-caption {
+      font-size: 13px;
+      color: var(--text-muted);
+      min-height: 50px;
+    }
+
+    .comparison-table-wrap {
+      margin-top: 16px;
+      overflow-x: auto;
+    }
+
+    @media (max-width: 800px) {
+      .docs-grid { grid-template-columns: 1fr; }
+      .docs-sidebar { display: none; }
+      .relax-deck { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="grid-bg" aria-hidden="true"></div>
+
+<!-- NAVIGATION -->
+<nav>
+  <a href="index.html" class="logo">PATH<span>SYNC</span></a>
+  <div class="nav-links">
+    <a href="simulator.html">Simulator</a>
+    <a href="analytics.html">Benchmarks</a>
+    <a href="diagnostics.html">Resilience</a>
+    <a href="docs.html" class="active">Documentation</a>
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+      <span class="theme-toggle-icon" aria-hidden="true"></span>
+      <span class="theme-toggle-label">Light</span>
+    </button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="docs-grid">
+    
+    <!-- SIDEBAR NAV -->
+    <aside class="docs-sidebar">
+      <a href="#dijkstra-theory" class="active" onclick="activateLink(this)">Dijkstra's Routine</a>
+      <a href="#bellman-theory" onclick="activateLink(this)">Bellman-Ford Routine</a>
+      <a href="#edge-relaxation" onclick="activateLink(this)">Edge Relaxation Guide</a>
+      <a href="#protocols" onclick="activateLink(this)">Routing Protocols (OSPF vs RIP)</a>
+    </aside>
+    
+    <!-- MAIN DOCUMENTATION -->
+    <main class="docs-content">
+      
+      <!-- DIJKSTRA'S ALGORITHM -->
+      <section id="dijkstra-theory" class="docs-section">
+        <h2>Dijkstra's Shortest Path Routine</h2>
+        <p>
+          Dijkstra's algorithm is a greedy pathfinder designed to find the shortest path from a single source node to all other nodes in a weighted graph.
+          It behaves as a Breadth-First search using a **Priority Queue** to prioritize visiting nodes with the lowest accumulated cost.
+        </p>
+        <div class="code-block">
+<span class="keyword">function</span> Dijkstra(Graph, source):
+    dist[v] = <span class="keyword">Infinity</span> <span class="comment"># Initialize distances</span>
+    prev[v] = <span class="keyword">null</span>     <span class="comment"># Initialize routing paths</span>
+    dist[source] = 0
+    
+    pq = MinHeap()
+    pq.push((0, source))
+    
+    <span class="keyword">while</span> pq is not empty:
+        (d, u) = pq.pop()
+        <span class="keyword">if</span> u is visited: <span class="keyword">continue</span>
+        mark u as visited
+        
+        <span class="keyword">for each</span> neighbor v of u:
+            <span class="keyword">if</span> dist[u] + w(u,v) &lt; dist[v]:
+                <span class="highlight">dist[v] = dist[u] + w(u,v)</span> <span class="comment"># Relaxation step</span>
+                prev[v] = u
+                pq.push((dist[v], v))
+                
+    <span class="keyword">return</span> dist, prev
+        </div>
+        <p style="font-size:14px; color:var(--text-muted);">
+          <strong>Complexity:</strong> Dijkstra's execution runs in $O(V^2)$ on standard arrays, but improves to $O(E \log V)$ using binary min-heaps. It is highly efficient for sparse layouts.
+          <br>
+          <span style="color:var(--fail-color); font-weight:600;">Limitation:</span> Fails on negative edge weight paths because once a node is visited, its cost is assumed finalized.
+        </p>
+      </section>
+
+      <!-- BELLMAN-FORD ALGORITHM -->
+      <section id="bellman-theory" class="docs-section">
+        <h2>Bellman-Ford Relaxer Routine</h2>
+        <p>
+          Bellman-Ford is a dynamic programming algorithm that solves the single-source shortest path problem on weighted graphs.
+          Instead of grease-visiting nodes, it repeatedly relaxes all edges $V - 1$ times.
+        </p>
+        <div class="code-block">
+<span class="keyword">function</span> BellmanFord(Graph, source):
+    dist[v] = <span class="keyword">Infinity</span>; dist[source] = 0
+    prev[v] = <span class="keyword">null</span>
+    
+    <span class="keyword">for</span> i = 1 <span class="keyword">to</span> V - 1:
+        <span class="keyword">for each</span> edge (u, v, w):
+            <span class="keyword">if</span> dist[u] + w &lt; dist[v]:
+                <span class="highlight">dist[v] = dist[u] + w</span> <span class="comment"># Relax edge</span>
+                prev[v] = u
+                
+    <span class="comment"># Negative loop cycle check</span>
+    <span class="keyword">for each</span> edge (u, v, w):
+        <span class="keyword">if</span> dist[u] + w &lt; dist[v]:
+            <span class="keyword">return</span> <span class="keyword">"Negative cycle detected!"</span>
+            
+    <span class="keyword">return</span> dist, prev
+        </div>
+        <p style="font-size:14px; color:var(--text-muted);">
+          <strong>Complexity:</strong> Execution runs in $O(V \cdot E)$. It is slower than Dijkstra on large graphs but guarantees correctness under negative link constraints.
+          <br>
+          <span style="color:var(--success); font-weight:600;">Benefit:</span> Explicitly detects negative weight loop cycles, protecting against looping route failure conditions.
+        </p>
+      </section>
+
+      <!-- EDGE RELAXATION INTERACTIVE -->
+      <section id="edge-relaxation" class="docs-section">
+        <h2>Interactive Edge Relaxation Guide</h2>
+        <p>
+          Relaxation is the process of updating a node's distance with a shorter route found through a neighbor.
+          Click through the slides below to witness this process.
+        </p>
+        
+        <div class="relax-deck">
+          <div class="relax-visual">
+            <svg viewBox="0 0 240 140">
+              <!-- Edge Lines -->
+              <line id="edge-ab" x1="40" y1="70" x2="120" y2="30" stroke="var(--border)" stroke-width="1.5"/>
+              <line id="edge-ac" x1="40" y1="70" x2="120" y2="110" stroke="var(--border)" stroke-width="1.5"/>
+              <line id="edge-bc" x1="120" y1="30" x2="120" y2="110" stroke="var(--border)" stroke-width="1.5"/>
+              
+              <!-- Edge Weights -->
+              <text x="75" y="42" font-family="JetBrains Mono" font-size="9" fill="var(--text-muted)" text-anchor="middle">w=4</text>
+              <text x="75" y="102" font-family="JetBrains Mono" font-size="9" fill="var(--text-muted)" text-anchor="middle">w=8</text>
+              <text x="132" y="74" font-family="JetBrains Mono" font-size="9" fill="var(--text-muted)" text-anchor="middle">w=2</text>
+              
+              <!-- Nodes -->
+              <circle id="node-a" cx="40" cy="70" r="14" class="node-circle active"/>
+              <text x="40" y="74" font-family="JetBrains Mono" font-size="9" font-weight="700" fill="var(--dijk)" text-anchor="middle">A</text>
+              <text id="dist-a" x="40" y="96" font-family="JetBrains Mono" font-size="8" fill="var(--text-muted)" text-anchor="middle">d=0</text>
+              
+              <circle id="node-b" cx="120" cy="30" r="14" class="node-circle"/>
+              <text x="120" y="34" font-family="JetBrains Mono" font-size="9" font-weight="700" fill="var(--text)" text-anchor="middle">B</text>
+              <text id="dist-b" x="120" y="12" font-family="JetBrains Mono" font-size="8" fill="var(--text-muted)" text-anchor="middle">d=∞</text>
+              
+              <circle id="node-c" cx="120" cy="110" r="14" class="node-circle"/>
+              <text x="120" y="114" font-family="JetBrains Mono" font-size="9" font-weight="700" fill="var(--text)" text-anchor="middle">C</text>
+              <text id="dist-c" x="120" y="132" font-family="JetBrains Mono" font-size="8" fill="var(--text-muted)" text-anchor="middle">d=∞</text>
+            </svg>
+          </div>
+          
+          <div class="relax-details">
+            <div style="font-family:var(--mono); font-size:11px; font-weight:700; color:var(--dijk);" id="slide-num">Slide 1 / 4</div>
+            <div class="relax-caption" id="slide-caption">
+              Initial network state. We start path calculations from source node <strong>A</strong>. Initial distances for unexplored nodes <strong>B</strong> and <strong>C</strong> are set to $d=∞$.
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-sm" onclick="relaxPrevStep()">Prev Slide</button>
+              <button class="btn btn-primary btn-sm" onclick="relaxNextStep()">Next Slide</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- INDUSTRIAL PROTOCOLS comparison -->
+      <section id="protocols" class="docs-section">
+        <h2>Industrial Routing Protocols</h2>
+        <p>
+          Shortest path routing algorithms form the backbone of core Internet routing standards. 
+          The two most popular interior gateway routing protocols map directly to our simulation modes.
+        </p>
+
+        <div class="comparison-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Protocol Specs</th>
+                <th>OSPF (Open Shortest Path First)</th>
+                <th>RIP (Routing Information Protocol)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Underlying Engine</strong></td>
+                <td>Dijkstra (Link-State Pathfinder)</td>
+                <td>Bellman-Ford (Distance-Vector)</td>
+              </tr>
+              <tr>
+                <td><strong>Telemetry Topology</strong></td>
+                <td>Builds full layout tree locally</td>
+                <td>Knows neighbors and distance vectors</td>
+              </tr>
+              <tr>
+                <td><strong>Convergence Rate</strong></td>
+                <td>Rapid (Updates on change triggers)</td>
+                <td>Slow (Periodic timed broadcasts)</td>
+              </tr>
+              <tr>
+                <td><strong>Max Edge Limit</strong></td>
+                <td>No limit (Constrained by local memory)</td>
+                <td>15 Hop count limit (16 is unreachable)</td>
+              </tr>
+              <tr>
+                <td><strong>Link Metric (Weight)</strong></td>
+                <td>Interface Cost (Bandwidth based)</td>
+                <td>Hop count (Each router counts as 1)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  PathSync — Advanced Network Simulation and Planning Suite ·
+  <a href="simulator.html">Launch Simulator</a>
+</footer>
+
+<script>
+  function activateLink(link) {
+    document.querySelectorAll('.docs-sidebar a').forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+  }
+
+  // Interactive Edge Relaxation Slide Deck
+  let currentSlide = 1;
+  const totalSlides = 4;
+
+  const slidesData = [
+    {
+      num: "Slide 1 / 4",
+      caption: "Initial network state. We start path calculations from source node <strong>A</strong>. Initial distances for unexplored nodes <strong>B</strong> and <strong>C</strong> are set to $d=∞$.",
+      nodes: { a: 'active', b: '', c: '' },
+      dists: { a: 'd=0', b: 'd=∞', c: 'd=∞' },
+      edges: { ab: '', ac: '', bc: '' }
+    },
+    {
+      num: "Slide 2 / 4",
+      caption: "Probing link <strong>A→B</strong> (cost=4). Since $d(A) + w(A,B) = 4 < d(B)$, node <strong>B</strong>'s path cost relaxes from $∞$ to $4$.",
+      nodes: { a: 'active', b: 'active', c: '' },
+      dists: { a: 'd=0', b: 'd=4', c: 'd=∞' },
+      edges: { ab: 'active', ac: '', bc: '' }
+    },
+    {
+      num: "Slide 3 / 4",
+      caption: "Probing link <strong>A→C</strong> (cost=8). Since $d(A) + w(A,C) = 8 < d(C)$, node <strong>C</strong> relaxes from $∞$ to $8$. Paths verified so far: A→B (4) and A→C (8).",
+      nodes: { a: 'active', b: 'active', c: 'active' },
+      dists: { a: 'd=0', b: 'd=4', c: 'd=8' },
+      edges: { ab: '', ac: 'active', bc: '' }
+    },
+    {
+      num: "Slide 4 / 4",
+      caption: "Visiting node <strong>B</strong> (dist=4) and probing path <strong>B→C</strong> (cost=2). Since $d(B) + w(B,C) = 6 < d(C)$, node <strong>C</strong> relaxes from $8$ to $6$. Optimal path to C is A→B→C.",
+      nodes: { a: 'active', b: 'active', c: 'active' },
+      dists: { a: 'd=0', b: 'd=4', c: 'd=6' },
+      edges: { ab: '', ac: '', bc: 'active' }
+    }
+  ];
+
+  function renderRelaxDeck() {
+    const data = slidesData[currentSlide - 1];
+    
+    // Slide metadata
+    document.getElementById('slide-num').innerText = data.num;
+    document.getElementById('slide-caption').innerHTML = data.caption;
+    
+    // Nodes classes
+    document.getElementById('node-a').className.baseVal = 'node-circle ' + data.nodes.a;
+    document.getElementById('node-b').className.baseVal = 'node-circle ' + data.nodes.b;
+    document.getElementById('node-c').className.baseVal = 'node-circle ' + data.nodes.c;
+    
+    // Distances values
+    document.getElementById('dist-a').textContent = data.dists.a;
+    document.getElementById('dist-b').textContent = data.dists.b;
+    document.getElementById('dist-c').textContent = data.dists.c;
+    
+    // Edge classes
+    document.getElementById('edge-ab').className.baseVal = 'edge-line ' + data.edges.ab;
+    document.getElementById('edge-ac').className.baseVal = 'edge-line ' + data.edges.ac;
+    document.getElementById('edge-bc').className.baseVal = 'edge-line ' + data.edges.bc;
+  }
+
+  function relaxNextStep() {
+    if (currentSlide < totalSlides) {
+      currentSlide++;
+      renderRelaxDeck();
+    }
+  }
+
+  function relaxPrevStep() {
+    if (currentSlide > 1) {
+      currentSlide--;
+      renderRelaxDeck();
+    }
+  }
+</script>
+</body>
+</html>
